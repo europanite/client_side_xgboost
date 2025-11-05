@@ -1,0 +1,10 @@
+title: "frontend_template"
+description: "A Template For Frontend Development."
+baseurl: "/frontend_template"
+url: "https://europanite.github.io"
+theme: minima
+markdown: kramdown
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+highlighter: rouge
