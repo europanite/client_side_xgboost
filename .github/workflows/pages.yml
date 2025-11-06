@@ -21,15 +21,15 @@ jobs:
         with:
           node-version: 20
       - name: Install deps
-        working-directory: ./vite/app
+        working-directory: ./frontend/app
         run: npm i
       - name: Build
-        working-directory: ./vite/app
+        working-directory: ./frontend/app
         run: npm run build:demo
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./vite/app/dist
+          path: ./frontend/app/dist
   deploy:
     needs: build
     runs-on: ubuntu-latest
