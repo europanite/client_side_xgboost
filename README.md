@@ -1,7 +1,8 @@
 # [Client Side XGBoost](https://github.com/europanite/client_side_xgboost "Client Side XGBoost")
 
+[![pages](https://github.com/europanite/client_side_xgboost/actions/workflows/pages.yml/badge.svg)](https://github.com/europanite/client_side_xgboost/actions/workflows/pages.yml)
 
-Client Side Browser-Based XGBoost Time-Series Prediction. 
+Client Side Browser-Based XGBoost Time-Series Forecast. 
 
 !["web_ui"](./assets/images/web_ui.png)
 
