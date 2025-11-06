@@ -1,7 +1,7 @@
 # [Client Side XGBoost](https://github.com/europanite/client_side_xgboost "Client Side XGBoost")
 
 
-A Client Side Browser-Based XGBoost Time-Series Prediction Playground. 
+Client Side Browser-Based XGBoost Time-Series Prediction. 
 
 !["web_ui"](./assets/images/web_ui.png)
 
@@ -9,12 +9,6 @@ A Client Side Browser-Based XGBoost Time-Series Prediction Playground.
 
 ##  🚀 PlayGround
  [Client Side XGBoost](https://europanite.github.io/client_side_xgboost/)
-
----
-
-**full-stack development environment** using:
-- **Vite**: [Vite](https://vite.dev/) 
-- **Container**: [Docker Compose](https://docs.docker.com/compose/) for consistent development setup
 
 ---
 
@@ -27,6 +21,12 @@ datetime,item_a,item_b,item_c,...
 2025-01-03 00:00:00+09:00,14,18,33,...
  ...
 </pre>
+
+---
+
+**Development Environment**
+- **Vite**: [Vite](https://vite.dev/) 
+- **Container**: [Docker Compose](https://docs.docker.com/compose/) for consistent development setup
 
 ---
 
