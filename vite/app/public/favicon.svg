@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="61" fill="#4F46E5"/>
-  <!-- 'E' monogram -->
-  <rect x="92" y="92" width="56" height="328" fill="#FFFFFF"/>
-  <rect x="92" y="92" width="328" height="56" fill="#FFFFFF"/>
-  <rect x="92" y="228" width="284" height="56" fill="#FFFFFF"/>
-  <rect x="92" y="364" width="328" height="56" fill="#FFFFFF"/>
-</svg>
