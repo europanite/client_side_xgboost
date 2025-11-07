@@ -1,91 +1,134 @@
-const WASM_URL = new URL(
-  `${import.meta.env.BASE_URL}vendor/ml-xgboost/xgboost.wasm`,
-  self.location.href
-).toString();
+import type { XGBoostInterface } from "./types/ml-xgboost";
 
-async function fetchWasmBinary(url: string): Promise<ArrayBuffer> {
-  const u = new URL(url);
-  u.searchParams.set("t", String(Date.now()));        // bust cache in dev/HMR
-  const r = await fetch(u.toString(), { cache: "no-store" });
-  if (!r.ok) throw new Error(`Failed to fetch wasm: ${u} status=${r.status} ${r.statusText}`);
-  return await r.arrayBuffer();
+let cachedCtor: (new (...args: any[]) => XGBoostInterface) | null = null;
+
+const WASM_PATH = "vendor/ml-xgboost/xgboost.wasm";
+
+function guessBase(): string {
+  if (typeof window === "undefined" || !window.location) {
+    return "http://localhost/";
+  }
+
+  const { origin, pathname } = window.location;
+
+  const m = pathname.match(/^\/([^/]+)\/(index\.html)?$/);
+  if (m) {
+    return `${origin}/${m[1]}/`;
+  }
+
+  return `${origin}/`;
 }
 
-export async function initXGBoostCtor(): Promise<any> {
-  const wasmBytes = await fetchWasmBinary(WASM_URL);
-  const wasmResp = new Response(new Blob([wasmBytes], { type: "application/wasm" }), {
-    status: 200,
-    headers: { "Content-Type": "application/wasm" },
-  });
+function getWasmUrl(): string {
+  return guessBase() + WASM_PATH;
+}
 
-  const origFetch = self.fetch.bind(self);
-  (self as any).fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-    try {
-      const url = typeof input === "string" ? input : (input as Request).url;
-      if (url.includes("xgboost.wasm")) {
-        return Promise.resolve(wasmResp.clone());
-      }
-    } catch { /* ignore */ }
-    return origFetch(input as any, init as any);
+async function initXGBoostCtor(): Promise<
+  new (...args: any[]) => XGBoostInterface
+> {
+  if (cachedCtor) return cachedCtor;
+
+  const wasmUrl = getWasmUrl();
+
+  const originalFetch = (globalThis as any).fetch?.bind(globalThis);
+  if (typeof originalFetch !== "function") {
+    throw new Error("global fetch is not available to load XGBoost wasm.");
+  }
+
+  // Right wasm 
+  const resp = await originalFetch(wasmUrl);
+  if (!resp.ok) {
+    throw new Error(
+      `Failed to fetch xgboost.wasm from ${wasmUrl} (status ${resp.status})`
+    );
+  }
+
+  const buf = await resp.arrayBuffer();
+  const view = new Uint8Array(buf);
+
+  // wasm Magic Number Check (00 61 73 6d)
+  if (
+    view.length < 4 ||
+    view[0] !== 0x00 ||
+    view[1] !== 0x61 ||
+    view[2] !== 0x73 ||
+    view[3] !== 0x6d
+  ) {
+    throw new Error(
+      `Invalid xgboost.wasm at ${wasmUrl}.`
+    );
+  }
+
+  const wasmResponse: any =
+    typeof Response !== "undefined"
+      ? new Response(buf, {
+          status: 200,
+          headers: { "Content-Type": "application/wasm" },
+        })
+      : {
+          ok: true,
+          status: 200,
+          headers: {
+            get(name: string) {
+              return name.toLowerCase() === "content-type"
+                ? "application/wasm"
+                : null;
+            },
+          },
+          async arrayBuffer() {
+            return buf;
+          },
+          clone() {
+            // good enough for our usage in tests
+            return this;
+          },
+        };
+
+  (globalThis as any).fetch = (input: any, init?: any) => {
+    const url = typeof input === "string" ? input : input?.url;
+    if (typeof url === "string" && url.includes("xgboost.wasm")) {
+      return Promise.resolve(wasmResponse.clone());
+    }
+    return originalFetch(input, init);
   };
 
-  let mod: any;
   try {
-    mod = await import("ml-xgboost");
+    const mod: any = await import("ml-xgboost");
+    const ctor = await resolveCtor(mod);
+
+    if (!ctor) {
+      throw new Error("ml-xgboost module did not expose a usable constructor.");
+    }
+
+    cachedCtor = ctor;
+    return ctor;
   } finally {
-    (self as any).fetch = origFetch;
+    (globalThis as any).fetch = originalFetch;
   }
-
-    const normalize = async (m: any): Promise<any | null> => {
-    if (!m) return null;
-
-    if (typeof m?.then === "function") {
-        return await normalize(await m);
-    }
-
-    if (m?.default) {
-        return await normalize(m.default);
-    }
-
-    if (m?.XGBoost && typeof m.XGBoost === "function") {
-        return m.XGBoost;
-    }
-
-    if (typeof m === "function") {
-        const src = Function.prototype.toString.call(m);
-        const looksLikeClass =
-        src.startsWith("class ") ||
-        /class\s+[A-Za-z0-9_]+/.test(src) ||
-        ("prototype" in m && Object.getOwnPropertyNames(m.prototype || {}).length > 1);
-
-        if (looksLikeClass) {
-        return m;
-        }
-
-        try {
-        const ctor = await m({
-            locateFile: (p: string) => (p.endsWith(".wasm") ? WASM_URL : p),
-        });
-        return ctor;
-        } catch (e: any) {
-        if (String(e).includes("cannot be invoked without 'new'")) {
-            return m; 
-        }
-        throw e;
-        }
-    }
-
-    return null;
-    };
-
-  const ctor =
-    (await normalize(mod)) ??
-    (await normalize(mod?.default)) ??
-    (await normalize((mod && mod["ml-xgboost"]) || null));
-
-  if (!ctor || typeof ctor !== "function") {
-    const keys = Object.keys(mod || {});
-    throw new Error(`ml-xgboost export shape unsupported. typeof default=${typeof mod?.default}, keys=${keys.join(",")}`);
-  }
-  return ctor;
 }
+
+async function resolveCtor(mod: any): Promise<any | null> {
+  if (!mod) return null;
+
+  // Promise
+  if (typeof mod.then === "function") {
+    return resolveCtor(await mod);
+  }
+
+  if (mod.default) {
+    const r = await resolveCtor(mod.default);
+    if (r) return r;
+  }
+
+  if (typeof mod.XGBoost === "function") {
+    return mod.XGBoost;
+  }
+
+  if (typeof mod === "function") {
+    return mod;
+  }
+
+  return null;
+}
+
+export { initXGBoostCtor };

@@ -18,6 +18,8 @@ import {
   Tooltip,
 } from "chart.js";
 
+import type { ChartData, ChartOptions } from "chart.js";
+
 ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Legend, Tooltip);
 
 export default function App() {
@@ -257,18 +259,17 @@ export default function App() {
   );
 }
 
-function buildChartData(data: LoadedData | null) {
+function buildChartData(
+  data: LoadedData | null
+): { data: ChartData<"line">; options: ChartOptions<"line"> } | null {
   if (!data || !data.rows.length) return null;
 
   const useDatetime =
-    !!data.datetimeKey &&
-    data.headers.includes(data.datetimeKey);
+    !!data.datetimeKey && data.headers.includes(data.datetimeKey);
 
-  const labels = useDatetime
-    ? data.rows.map(
-        (r) => String(r[data.datetimeKey as string] ?? "")
-      )
-    : data.rows.map((_, i) => i);
+  const labels: string[] = useDatetime
+    ? data.rows.map((r) => String(r[data.datetimeKey as string] ?? ""))
+    : data.rows.map((_, i) => String(i)); // ← number ではなく string に統一
 
   const numericKeys = data.headers.filter((h) => {
     if (h === data.datetimeKey) return false;
@@ -306,11 +307,11 @@ function buildChartData(data: LoadedData | null) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      interaction: { mode: "index" as const, intersect: false },
+      interaction: { mode: "index", intersect: false },
       plugins: {
         legend: {
           display: true,
-          position: "top" as const,
+          position: "top",
         },
       },
       scales: {
