@@ -1,10 +1,8 @@
-// frontend/app/src/main.ts
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "./style.css";
 import App from "./App";
 
-// Ensure there is a root element; index.html currently has only <body>.
 let rootEl = document.getElementById("app");
 if (!rootEl) {
   rootEl = document.createElement("div");

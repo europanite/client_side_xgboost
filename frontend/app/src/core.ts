@@ -1,4 +1,3 @@
-// src/core.ts
 import { parseCSV, parseXLSX, buildFeatures } from "./api";
 import { initXGBoostCtor } from "./xgb";
 
