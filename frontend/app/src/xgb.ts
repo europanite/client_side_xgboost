@@ -1,51 +1,91 @@
-// Thin wrapper to lazily obtain an XGBoost-like constructor from "ml-xgboost".
-// In browser: uses actual WASM.
-// In tests: resolved via Jest's __mocks__/ml-xgboost.ts.
-
-let cachedCtor: any | null = null;
-
-// Relative path; resolved with a base URL inside fetchWasmBinary.
-const WASM_URL = "vendor/ml-xgboost/xgboost.wasm";
+const WASM_URL = new URL(
+  `${import.meta.env.BASE_URL}vendor/ml-xgboost/xgboost.wasm`,
+  self.location.href
+).toString();
 
 async function fetchWasmBinary(url: string): Promise<ArrayBuffer> {
-  const base =
-    typeof window !== "undefined" && window.location
-      ? // real browser: use current origin/path as base
-        window.location.origin +
-        window.location.pathname.replace(/\/[^/]*$/, "/")
-      : // Node / Jest: dummy origin so relative URL
-        "http://localhost/";
-
-  const u = new URL(url, base);
-  u.searchParams.set("t", String(Date.now())); // cache busting (harmless in tests)
-
-  const res = await fetch(u.toString(), { cache: "no-store" } as any);
-  if (!res.ok) {
-    throw new Error(
-      `Failed to fetch wasm: ${u.toString()} status=${res.status} ${res.statusText}`
-    );
-  }
-  return res.arrayBuffer();
+  const u = new URL(url);
+  u.searchParams.set("t", String(Date.now()));        // bust cache in dev/HMR
+  const r = await fetch(u.toString(), { cache: "no-store" });
+  if (!r.ok) throw new Error(`Failed to fetch wasm: ${u} status=${r.status} ${r.statusText}`);
+  return await r.arrayBuffer();
 }
 
 export async function initXGBoostCtor(): Promise<any> {
-  if (cachedCtor) return cachedCtor;
+  const wasmBytes = await fetchWasmBinary(WASM_URL);
+  const wasmResp = new Response(new Blob([wasmBytes], { type: "application/wasm" }), {
+    status: 200,
+    headers: { "Content-Type": "application/wasm" },
+  });
 
-  const mod: any = await import("ml-xgboost");
+  const origFetch = self.fetch.bind(self);
+  (self as any).fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    try {
+      const url = typeof input === "string" ? input : (input as Request).url;
+      if (url.includes("xgboost.wasm")) {
+        return Promise.resolve(wasmResp.clone());
+      }
+    } catch { /* ignore */ }
+    return origFetch(input as any, init as any);
+  };
 
+  let mod: any;
   try {
-    await fetchWasmBinary(WASM_URL);
-  } catch {
-    // ignore in non-browser / mocked env
+    mod = await import("ml-xgboost");
+  } finally {
+    (self as any).fetch = origFetch;
   }
 
-  const XGBoost =
-    mod.XGBoost || (mod.default && mod.default.XGBoost) || mod;
+    const normalize = async (m: any): Promise<any | null> => {
+    if (!m) return null;
 
-  if (!XGBoost) {
-    throw new Error("XGBoost constructor not found in ml-xgboost module");
+    if (typeof m?.then === "function") {
+        return await normalize(await m);
+    }
+
+    if (m?.default) {
+        return await normalize(m.default);
+    }
+
+    if (m?.XGBoost && typeof m.XGBoost === "function") {
+        return m.XGBoost;
+    }
+
+    if (typeof m === "function") {
+        const src = Function.prototype.toString.call(m);
+        const looksLikeClass =
+        src.startsWith("class ") ||
+        /class\s+[A-Za-z0-9_]+/.test(src) ||
+        ("prototype" in m && Object.getOwnPropertyNames(m.prototype || {}).length > 1);
+
+        if (looksLikeClass) {
+        return m;
+        }
+
+        try {
+        const ctor = await m({
+            locateFile: (p: string) => (p.endsWith(".wasm") ? WASM_URL : p),
+        });
+        return ctor;
+        } catch (e: any) {
+        if (String(e).includes("cannot be invoked without 'new'")) {
+            return m; 
+        }
+        throw e;
+        }
+    }
+
+    return null;
+    };
+
+  const ctor =
+    (await normalize(mod)) ??
+    (await normalize(mod?.default)) ??
+    (await normalize((mod && mod["ml-xgboost"]) || null));
+
+  if (!ctor || typeof ctor !== "function") {
+    const keys = Object.keys(mod || {});
+    throw new Error(`ml-xgboost export shape unsupported. typeof default=${typeof mod?.default}, keys=${keys.join(",")}`);
   }
-
-  cachedCtor = XGBoost;
-  return XGBoost;
+  return ctor;
 }
