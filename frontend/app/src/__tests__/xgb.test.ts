@@ -1,26 +1,17 @@
 import { initXGBoostCtor } from "../xgb";
 
-declare global {
-  // For TypeScript to accept our test-time assignment
-  // eslint-disable-next-line no-var
-  var fetch: typeof fetch;
-}
-
 describe("initXGBoostCtor", () => {
   beforeAll(() => {
-    // Minimal fetch stub that returns a valid ArrayBuffer response.
-    global.fetch = jest.fn(async () => {
+    (globalThis as any).fetch = jest.fn(async () => {
       const buf = new ArrayBuffer(8);
       return new Response(buf, {
         status: 200,
-        headers: { "Content-Type": "application/wasm" },
+        headers: { "Content-Type": "application/wasm" }
       }) as any;
-    }) as any;
+    });
 
-    // Ensure self is defined (jsdom env provides window; align self with it)
-    if (typeof self === "undefined" && typeof window !== "undefined") {
-      // @ts-ignore
-      global.self = window;
+    if (typeof (globalThis as any).self === "undefined") {
+      (globalThis as any).self = globalThis;
     }
   });
 

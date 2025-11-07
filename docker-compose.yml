@@ -14,5 +14,4 @@ services:
       - "5173:5173"  # Vite
     restart: unless-stopped
     command: ["npm","run","dev","--","--host","0.0.0.0","--port","5173"]
-volumes:
-  db_data:
+

@@ -11,7 +11,10 @@ module.exports = {
     "\\.(css|less|scss|sass)$": "<rootDir>/src/__mocks__/styleMock.js",
   },
   transform: {
-    "^.+\\.(ts|tsx)$": "ts-jest",
+    "^.+\\.(ts|tsx)$": [
+      "ts-jest",
+      { tsconfig: "<rootDir>/tsconfig.jest.json" }
+    ]
   },
   cacheDirectory: "<rootDir>/.jest-cache",
 };
