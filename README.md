@@ -2,7 +2,7 @@
 
 [![pages](https://github.com/europanite/client_side_time_series_forecast/actions/workflows/pages.yml/badge.svg)](https://github.com/europanite/client_side_time_series_forecast/actions/workflows/pages.yml)
 
-Client Side Browser-Based XGBoost Time-Series Forecast. 
+A Client Side Browser-Based XGBoost Time-Series Forecast Playground.
 
 !["web_ui"](./assets/images/web_ui.png)
 
@@ -46,6 +46,14 @@ docker compose build
 # Run the container
 docker compose up
 
+```
+
+### 3. Test:
+```bash
+docker compose \
+-f docker-compose.test.yml up \
+--build --exit-code-from \
+frontend_test
 ```
 
 ---
