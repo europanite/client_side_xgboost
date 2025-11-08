@@ -4,6 +4,8 @@ import {
   Text,
   Pressable,
   ScrollView,
+  TouchableOpacity,
+  Linking,
 } from "react-native-web";
 import type { LoadedData } from "./core";
 import { loadFromCSV, loadFromXLSX, trainModel, predictNext } from "./core";
@@ -88,6 +90,8 @@ export default function App() {
 
   const chartData = buildChartData(data);
 
+  const REPO_URL = "https://github.com/europanite/client_side_time_series_forecast";
+
   return (
     <View
       style={{
@@ -108,7 +112,23 @@ export default function App() {
         Client Side Time-Series Forecast
       </Text>
 
+          
+      <TouchableOpacity onPress={() => Linking.openURL(REPO_URL)}>
+        <Text
+          style={{
+            fontSize: 24,
+            fontWeight: "800",
+            marginBottom: 12,
+            color: "#1d4ed8",
+            textDecorationLine: "underline",
+          }}
+        >
+          DET Vocabulary Practice
+        </Text>
+      </TouchableOpacity>
+
       {/* File input (web via react-native-web) */}
+
       <View
         style={{
           width: "100%",
