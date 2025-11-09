@@ -121,7 +121,7 @@ export default function App() {
             fontSize: 24,
             fontWeight: "800",
             marginBottom: 12,
-            color: "#1d4ed8",
+            color: "#ffffffff",
             textDecorationLine: "underline",
           }}
         >
