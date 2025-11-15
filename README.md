@@ -27,12 +27,6 @@ datetime,item_a,item_b,item_c,...
 
 ---
 
-**Development Environment**
-- **Vite**: [Vite](https://vite.dev/) 
-- **Container**: [Docker Compose](https://docs.docker.com/compose/) for consistent development setup
-
----
-
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
