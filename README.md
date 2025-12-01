@@ -24,6 +24,144 @@ datetime,item_a,item_b,item_c,...
 
 ---
 
+## Feature Engineering
+
+This project treats the input as a small multi-variate time series:
+
+- One *datetime-like* column (header contains `date` or `time` in any case).
+- Several numeric columns (e.g., `item_a`, `item_b`, `item_c`, ...).
+- One of the numeric columns is chosen as the **target** to forecast.
+
+Internally, the feature builder constructs a **rich feature vector** for each time step `t` and a **future feature vector** for `t + 1`. All features are computed **purely on the client**, in JavaScript/TypeScript.
+
+### Series used for features
+
+- `datetimeKey`  
+  - Detected automatically from the header that contains `"date"` or `"time"`.
+  - Only used for locating the time axis; not used directly as a numeric feature.
+- `targetKey`  
+  - Numeric column the user chooses to forecast.
+- `featureKeys`  
+  - All other numeric columns (non-datetime, non-target).
+  - Treated as **exogenous series**.
+
+Internally we keep a `seriesMap: Record<string, number[]>` with one numeric array per series.
+
+### Per-series features (exogenous series)
+
+For every exogenous series `x(t)` (each key in `featureKeys`) and each time step `t`, we compute:
+
+1. **Contemporaneous value**
+   - `x(t)` (the value at time index `t`).
+
+2. **Lag features (history)**
+   - Up to `MAX_LAG = 3`:
+     - `x(t - 1)`
+     - `x(t - 2)`
+     - `x(t - 3)`
+   - This allows the model to learn short-term temporal dynamics per series.
+
+3. **First difference**
+   - `x(t) - x(t - 1)`
+   - Captures local changes (trend / slope) rather than absolute level only.
+
+4. **Rolling mean (local average)**
+   - Rolling window of `ROLLING_WINDOW = 7` time steps:
+     - `mean(x[t - 6 ... t])` (truncated near the beginning of the series)
+   - Represents local trend / baseline level and smooths short-term noise.
+
+> If the series is shorter than the window, the code automatically shrinks the window so that all available past points up to `t` are used.
+
+### Target-series history
+
+For the **target series** `y(t)` itself, we do **not** include the current value `y(t)` as a feature (because it is the label at that step), but we do include its history:
+
+1. **Target lags**
+   - `y(t - 1)`
+   - `y(t - 2)`
+   - `y(t - 3)`
+
+2. **Target difference**
+   - `y(t) - y(t - 1)`
+
+3. **Target rolling mean**
+   - Same rolling window as above:
+     - `mean(y[t - 6 ... t])`
+
+This lets the model learn patterns like “the next value depends on the last few values and their local trend,” which is typical in time-series forecasting.
+
+### Cross-series interactions
+
+To capture **relationships between different series**, we build interaction features for every **pair of numeric series** (including the target):
+
+- Let `v_i(t)` and `v_j(t)` be the contemporaneous values of two series at time `t`.
+- For each ordered pair `(i, j)` with `i < j`, we compute:
+
+1. **Spread**
+   - `v_i(t) - v_j(t)`
+   - Encodes relative level differences between series.
+
+2. **Ratio**
+   - `v_i(t) / v_j(t)`
+   - To avoid division by zero, the denominator includes a small epsilon if needed:
+     - `denom = |v_j| < 1e-9 ? sign(v_j) * 1e-9 : v_j`
+   - Encodes relative scale and proportionality.
+
+3. **Product**
+   - `v_i(t) * v_j(t)`
+   - Allows the model to express “interaction effects” where both series being large or small matters.
+
+These cross-series features explicitly expose **multi-series structure** to the booster instead of relying only on individual series values.
+
+### Time index and Fourier features
+
+We also encode time itself as numeric features:
+
+1. **Time index**
+   - Integer index `t = 0, 1, 2, ...` (row index).
+   - Gives the booster a simple way to model global trends.
+
+2. **Fourier features** (cyclical patterns)
+   - Two fixed periods (in units of “number of rows”):
+     - Period 24 (e.g., 24 hours in hourly data)
+     - Period 168 (e.g., 7 days × 24 hours)
+   - For each period `P` we compute:
+     - `sin(2πt / P)`
+     - `cos(2πt / P)`
+   - This is a standard way to embed seasonality/cycles in a form that tree models can still exploit.
+
+The final feature vector for each time step `t` is:
+
+```text
+[ exogenous features (current, lags, diff, rolling mean for each series),
+  target-series history (lags, diff, rolling mean),
+  cross-series interactions (spread, ratio, product),
+  time index, sin/cos(2πt/24), sin/cos(2πt/168) ]
+```
+
+### Future-step feature vector (lastFeatureRow)
+The same feature-building logic is used to produce a feature vector for t + 1 (one-step-ahead prediction):
+
+Conceptually, we treat the next time index as t_next = n where n is the number of observed rows.
+
+For the “current” values of each series at t_next, we reuse the last observed value (index n - 1).
+
+Lags and rolling means are computed using the last MAX_LAG / ROLLING_WINDOW steps in the observed data.
+
+Time encodings use t_next as the time index.
+
+This gives a single feature vector lastFeatureRow that represents the next time step based on all history up to the last observation.
+
+The buildFeatures function therefore returns:
+
+```text
+{
+  X: number[][];        // feature matrix for all observed steps
+  y: number[];          // target series values for those steps
+  lastFeatureRow: number[]; // feature vector representing t + 1
+}
+```
+
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
