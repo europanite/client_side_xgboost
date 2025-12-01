@@ -39,9 +39,13 @@ function simpleCSV(text: string): { rows: any[]; headers: string[] } {
 }
 
 /**
- * Feature builder:
- * - uses all non-datetime, non-target columns as numeric features
- * - adds simple time-index encodings
+ * Feature builder (rich version):
+ * - uses all non-datetime, non-target columns as exogenous numeric series
+ * - adds lags, differences, rolling means
+ * - adds target-series history (lags, diff, rolling mean)
+ * - adds cross-series interactions (spread / ratio / product)
+ * - adds time index + Fourier encodings
+ *
  * Returns full matrix + last-step feature row for +1 prediction.
  */
 export function buildFeatures(
@@ -49,59 +53,150 @@ export function buildFeatures(
   datetimeKey: string,
   targetKey: string
 ): { X: number[][]; y: number[]; lastFeatureRow: number[] } {
+  const MAX_LAG = 3;
+  const ROLLING_WINDOW = 7;
+  const EPS = 1e-9;
+
   if (!rows.length) {
     return { X: [], y: [], lastFeatureRow: [] };
   }
 
   const headers = Object.keys(rows[0] ?? {});
+
+  // Exogenous series = all non-datetime, non-target columns
   const featureKeys = headers.filter(
     (h) => h !== datetimeKey && h !== targetKey
   );
 
-  const toNum = (v: any) =>
+  const toNum = (v: any): number =>
     v === "" || v == null || (typeof v === "number" && Number.isNaN(v))
       ? NaN
       : Number(v);
 
+  // Numeric series map (exogenous + target)
+  const seriesKeys: string[] = [...featureKeys];
+  if (targetKey && headers.includes(targetKey)) {
+    seriesKeys.push(targetKey);
+  }
+
+  const seriesMap: Record<string, number[]> = {};
+  for (const key of seriesKeys) {
+    seriesMap[key] = rows.map((r) => toNum(r[key]));
+  }
+
+  const n = rows.length;
+
+  const getValue = (key: string, t: number): number => {
+    const arr = seriesMap[key];
+    if (!arr || !arr.length) return NaN;
+    const idx = t <= 0 ? 0 : t >= arr.length ? arr.length - 1 : t;
+    return arr[idx];
+  };
+
+  const rollingMean = (key: string, t: number): number => {
+    const arr = seriesMap[key];
+    if (!arr || !arr.length) return NaN;
+
+    const end = t >= arr.length ? arr.length - 1 : t;
+    const start = Math.max(0, end - (ROLLING_WINDOW - 1));
+
+    let sum = 0;
+    let count = 0;
+    for (let i = start; i <= end; i += 1) {
+      const v = arr[i];
+      if (Number.isFinite(v)) {
+        sum += v;
+        count += 1;
+      }
+    }
+    if (count === 0) return NaN;
+    return sum / count;
+  };
+
+  // For cross-series interactions we use all numeric series (including target)
+  const allKeysForCross: string[] = [...seriesKeys];
+
+  const buildRowFeatures = (t: number, isFuture: boolean): number[] => {
+    const feats: number[] = [];
+
+    // For the hypothetical future step we approximate "current" values
+    // by reusing the last observed index.
+    const baseIndex = isFuture ? n - 1 : t;
+
+    // --- 1) all exogenous current ---
+    for (const key of featureKeys) {
+      const cur = getValue(key, baseIndex);
+      feats.push(cur);
+    }
+
+    // --- 2) Lag・diff・rolling mean ---
+    for (const key of featureKeys) {
+      const cur = getValue(key, baseIndex);
+
+      // Lags up to MAX_LAG
+      for (let lag = 1; lag <= MAX_LAG; lag += 1) {
+        feats.push(getValue(key, baseIndex - lag));
+      }
+
+      // First difference vs previous step
+      const prev = getValue(key, baseIndex - 1);
+      feats.push(cur - prev);
+
+      // Rolling mean (window = ROLLING_WINDOW)
+      feats.push(rollingMean(key, baseIndex));
+    }
+
+    // 3) Cross-series interactions at "current" time
+    for (let i = 0; i < allKeysForCross.length; i += 1) {
+      const ki = allKeysForCross[i];
+      const vi = getValue(ki, baseIndex);
+
+      for (let j = i + 1; j < allKeysForCross.length; j += 1) {
+        const kj = allKeysForCross[j];
+        const vj = getValue(kj, baseIndex);
+
+        // Spread
+        feats.push(vi - vj);
+
+        // Ratio (with small epsilon to avoid 0-div)
+        const denom =
+          Math.abs(vj) < EPS ? (vj >= 0 ? EPS : -EPS) : vj;
+        feats.push(vi / denom);
+
+        // Product
+        feats.push(vi * vj);
+      }
+    }
+
+    // 4) Time encodings (index + Fourier)
+    const timeIndex = isFuture ? n : t;
+    feats.push(timeIndex);
+    feats.push(Math.sin((2 * Math.PI * timeIndex) / 24));
+    feats.push(Math.cos((2 * Math.PI * timeIndex) / 24));
+    feats.push(Math.sin((2 * Math.PI * timeIndex) / 168));
+    feats.push(Math.cos((2 * Math.PI * timeIndex) / 168));
+
+    return feats;
+  };
+
   const X: number[][] = [];
   const y: number[] = [];
 
-  rows.forEach((r, idx) => {
-    const t = idx;
-    const feats: number[] = [];
+  for (let t = 0; t < n; t += 1) {
+    X.push(buildRowFeatures(t, false));
 
-    // Other series as features
-    featureKeys.forEach((k) => {
-      feats.push(toNum(r[k]));
-    });
+    const series = seriesMap[targetKey];
+    const targetVal =
+      series && series.length > t
+        ? series[t]
+        : toNum(rows[t]?.[targetKey]);
+    y.push(targetVal);
+  }
 
-    // Time encodings
-    feats.push(t);
-    feats.push(Math.sin((2 * Math.PI * t) / 24));
-    feats.push(Math.cos((2 * Math.PI * t) / 24));
-    feats.push(Math.sin((2 * Math.PI * t) / 168));
-    feats.push(Math.cos((2 * Math.PI * t) / 168));
+  // +1 step feature row (future step)
+  const lastFeatureRow = buildRowFeatures(n, true);
 
-    X.push(feats);
-    y.push(toNum(r[targetKey]));
-  });
-
-  // +1 step feature row, reusing last row's non-target features
-  const last = rows[rows.length - 1];
-  const tNext = rows.length;
-  const nextFeats: number[] = [];
-
-  featureKeys.forEach((k) => {
-    nextFeats.push(toNum(last[k]));
-  });
-
-  nextFeats.push(tNext);
-  nextFeats.push(Math.sin((2 * Math.PI * tNext) / 24));
-  nextFeats.push(Math.cos((2 * Math.PI * tNext) / 24));
-  nextFeats.push(Math.sin((2 * Math.PI * tNext) / 168));
-  nextFeats.push(Math.cos((2 * Math.PI * tNext) / 168));
-
-  return { X, y, lastFeatureRow: nextFeats };
+  return { X, y, lastFeatureRow };
 }
 
 /**

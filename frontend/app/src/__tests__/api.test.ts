@@ -28,7 +28,7 @@ datetime,a,b,target
 });
 
 describe("buildFeatures", () => {
-  it("builds feature matrix and last-step feature row", () => {
+  it("builds rich feature matrix and last-step feature row", () => {
     const rows = [
       { datetime: "t0", a: "1", b: "2", target: "10" },
       { datetime: "t1", a: "3", b: "4", target: "20" },
@@ -40,18 +40,19 @@ describe("buildFeatures", () => {
       "target"
     );
 
-    // Feature columns: a, b + 5 time features = 7 dimensions
+    // Still one feature row per input row
     expect(X).toHaveLength(2);
-    expect(X[0]).toHaveLength(7);
-    expect(X[1]).toHaveLength(7);
 
-    // Target
+    // Dimension is now much larger than the original 7
+    expect(X[0].length).toBeGreaterThan(7);
+    expect(X[1].length).toBe(X[0].length);
+    expect(lastFeatureRow.length).toBe(X[0].length);
+
+    // Target values unchanged
     expect(y).toEqual([10, 20]);
 
-    // Last-step feature row dimension
-    expect(lastFeatureRow).toHaveLength(7);
-
-    // Uses last row's non-target features for extrapolation base
+    // First few features still use the last row's exogenous values
+    // (so callers can rely on "a, b ..." ordering for the base series)
     expect(lastFeatureRow[0]).toBe(3); // a from last row
     expect(lastFeatureRow[1]).toBe(4); // b from last row
   });
