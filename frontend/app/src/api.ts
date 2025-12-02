@@ -129,7 +129,7 @@ export function buildFeatures(
       feats.push(cur);
     }
 
-    // --- 2) Lag・diff・rolling mean ---
+    // --- 2) Lag diff rolling mean ---
     for (const key of featureKeys) {
       const cur = getValue(key, baseIndex);
 
