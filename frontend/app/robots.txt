@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://europanite.github.io/client_side_time_series_forecast/sitemap.xml
