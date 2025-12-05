@@ -1,24 +1,8 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.so
-*.egg
-*.egg-info/
-.eggs/
-*.log
-*.sqlite3
-db.sqlite3
-
 # Virtual env
 .venv/
 env/
 venv/
 ENV/
-
-# Jupyter
-.ipynb_checkpoints/
 
 # Node / React Native (Expo)
 node_modules/
@@ -56,6 +40,3 @@ frontend/app/.jest-cache/
 
 # mat
 mat/
-
-
-client_side_*
