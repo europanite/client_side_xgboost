@@ -14,7 +14,7 @@ A Client-Side Browser-Based Multivariate Time-Series Forecast Playground powered
 
 ## Overview
 
-This is a multivariate　time series forecasting tool that runs entirely in your web browser.
+This is a multivariate time series forecasting tool that runs entirely in your web browser.
 No installation, registration, or payment required. 
 Just access it with your browser and you're ready to go.
 It helps small businesses predict tomorrow's orders.
