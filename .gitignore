@@ -30,9 +30,8 @@ desktop.ini
 *.sock
 *.tar
 
-# coverage reports (backend & frontend)
+# coverage reports
 coverage/
-backend/app/coverage/
 frontend/app/coverage/
 
 # Jest cache
